@@ -1,4 +1,4 @@
-const CaretakerDashboardModel = require("../models/caretakerDashboard.model");
+const CaretakerDashboardModel = require("../models/caretakerdashboard.model");
 
 const dashboardController = {
   async getDashboardData(req, res, next) {
