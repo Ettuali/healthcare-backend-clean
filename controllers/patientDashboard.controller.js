@@ -1,4 +1,4 @@
-const PatientDashboardModel = require("../models/PatientDashboard.model");
+const PatientDashboardModel = require("../models/patientDashboard.model");
 
 const capitalizeFirstLetter = (string) => {
   if (!string) return "";
