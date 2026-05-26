@@ -1,28 +1,32 @@
 const pool = require("../config/db");
 
 class CaretakerDashboardModel {
-  static async getDashboardData(year, month, date, userId) {
+  static async getDashboardData(fromDate, toDate, userId) {
 
     // =========================
-    // 1️⃣ TOTAL PATIENTS + DOCTORS
+    // 1️⃣ TOTAL PATIENTS
     // =========================
     const [[{ totalPatients }]] = await pool.query(`
-      SELECT COUNT(DISTINCT pa.patientId) AS totalPatients
-      FROM patient_assignments pa
-      JOIN userrole ur ON ur.userId = pa.patientId
-      JOIN roles r ON r.id = ur.roleId
+      SELECT COUNT(DISTINCT pv.patientId) AS totalPatients
+      FROM patientvitalslogs pv
+      JOIN patient_assignments pa ON pa.patientId = pv.patientId
       WHERE pa.caretakerId = ?
-      AND LOWER(r.roleName) = 'patient'
-    `, [userId]);
-
-    const [[{ totalDoctors }]] = await pool.query(`
-      SELECT COUNT(DISTINCT doctorId) AS totalDoctors
-      FROM patient_assignments
-      WHERE caretakerId = ?
-    `, [userId]);
+      AND pv.updatedOn BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)
+    `, [userId, fromDate, toDate]);
 
     // =========================
-    // 2️⃣ LATEST 5 PATIENT VITALS (FOR TABLE)
+    // 2️⃣ TOTAL DOCTORS (all-time)
+    // =========================
+const [[{ totalDoctors }]] = await pool.query(`
+  SELECT COUNT(DISTINCT pa.doctorId) AS totalDoctors
+  FROM patient_assignments pa
+  JOIN patientvitalslogs pv ON pv.patientId = pa.patientId
+  WHERE pa.caretakerId = ?
+  AND pv.updatedOn BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)
+`, [userId, fromDate, toDate]);
+
+    // =========================
+    // 3️⃣ PATIENT VITALS (FOR TABLE)
     // =========================
     const [patientVitals] = await pool.query(`
       SELECT 
@@ -44,20 +48,19 @@ class CaretakerDashboardModel {
             ORDER BY updatedOn DESC, id DESC
           ) AS rn
         FROM patientvitalslogs
+        WHERE updatedOn BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)
       ) pv
       JOIN user u ON pv.patientId = u.id
       WHERE pv.rn = 1
       AND pv.patientId IN (
-        SELECT patientId 
-        FROM patient_assignments 
-        WHERE caretakerId = ?
+        SELECT patientId FROM patient_assignments WHERE caretakerId = ?
       )
       ORDER BY pv.updatedOn DESC
       LIMIT 5
-    `, [userId]);
+    `, [fromDate, toDate, userId]);
 
     // =========================
-    // 🔥 NEW: ALL PATIENTS (FOR NEEDS ATTENTION)
+    // 4️⃣ ALL PATIENTS (FOR NEEDS ATTENTION)
     // =========================
     const [allPatients] = await pool.query(`
       SELECT 
@@ -69,30 +72,31 @@ class CaretakerDashboardModel {
       LEFT JOIN (
         SELECT patientId, MAX(updatedOn) AS updatedOn
         FROM patientvitalslogs
+        WHERE updatedOn BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)
         GROUP BY patientId
       ) pv ON pv.patientId = u.id
       WHERE pa.caretakerId = ?
-    `, [userId]);
+    `, [fromDate, toDate, userId]);
 
     // =========================
-    // 3️⃣ CRITICAL ALERTS
+    // 5️⃣ CRITICAL ALERTS
     // =========================
     const criticalAlerts = patientVitals.filter(
       v => v.severityLevel?.toLowerCase() === "high"
     ).length;
 
     // =========================
-    // 4️⃣ TASK PROGRESS
+    // 6️⃣ TASK PROGRESS (filtered by date)
     // =========================
     const [taskStats] = await pool.query(`
       SELECT status, COUNT(*) as count
       FROM tasks
       WHERE assigned_by = ?
+      AND created_at BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)
       GROUP BY status
-    `, [userId]);
+    `, [userId, fromDate, toDate]);
 
     let pending = 0, inProgress = 0, completed = 0;
-
     taskStats.forEach(t => {
       const status = t.status?.toLowerCase();
       if (status === "pending") pending = t.count;
@@ -107,20 +111,20 @@ class CaretakerDashboardModel {
     ];
 
     // =========================
-    // 5️⃣ OVERDUE TASKS
+    // 7️⃣ OVERDUE TASKS (filtered by date)
     // =========================
     const [overdueTasksResult] = await pool.query(`
       SELECT COUNT(*) as count
       FROM tasks
       WHERE assigned_by = ?
       AND status != 'completed'
-      AND due_date < NOW()
-    `, [userId]);
+      AND due_date BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)
+    `, [userId, fromDate, toDate]);
 
     const overdueTasks = overdueTasksResult[0]?.count || 0;
 
     // =========================
-    // 6️⃣ GENDER DISTRIBUTION
+    // 8️⃣ GENDER DISTRIBUTION
     // =========================
     const [genderData] = await pool.query(`
       SELECT u.gender, COUNT(*) as count
@@ -129,23 +133,26 @@ class CaretakerDashboardModel {
       JOIN roles r ON r.id = ur.roleId
       WHERE LOWER(r.roleName) = 'patient'
       AND u.id IN (
-        SELECT patientId FROM patient_assignments WHERE caretakerId = ?
+        SELECT DISTINCT patientId FROM patient_assignments WHERE caretakerId = ?
+      )
+      AND u.id IN (
+        SELECT DISTINCT patientId FROM patientvitalslogs
+        WHERE updatedOn BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)
       )
       GROUP BY u.gender
-    `, [userId]);
+    `, [userId, fromDate, toDate]);
 
     const genderDistribution = [
       { gender: "Male", count: 0 },
       { gender: "Female", count: 0 }
     ];
-
     genderData.forEach(g => {
       if (g.gender?.toLowerCase() === "male") genderDistribution[0].count = g.count;
       if (g.gender?.toLowerCase() === "female") genderDistribution[1].count = g.count;
     });
 
     // =========================
-    // 7️⃣ AGE DISTRIBUTION
+    // 9️⃣ AGE DISTRIBUTION
     // =========================
     const [ageDistribution] = await pool.query(`
       SELECT 
@@ -162,60 +169,56 @@ class CaretakerDashboardModel {
       JOIN roles r ON r.id = ur.roleId
       WHERE LOWER(r.roleName) = 'patient'
       AND u.id IN (
-        SELECT patientId FROM patient_assignments WHERE caretakerId = ?
+        SELECT DISTINCT patientId FROM patient_assignments WHERE caretakerId = ?
+      )
+      AND u.id IN (
+        SELECT DISTINCT patientId FROM patientvitalslogs
+        WHERE updatedOn BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)
       )
       GROUP BY ageGroup
       ORDER BY FIELD(ageGroup, '0-20','21-40','41-60','61-80','80+')
-    `, [userId]);
+    `, [userId, fromDate, toDate]);
 
     // =========================
-    // 8️⃣ BLOOD GROUP DISTRIBUTION
+    // 🔟 BLOOD GROUP DISTRIBUTION
     // =========================
     const [rawBloodGroupData] = await pool.query(`
-  SELECT 
-    t.bloodGroup,
-    u.gender,
-    COUNT(*) as count
-  FROM (
-    SELECT patientId, bloodGroup,
-           ROW_NUMBER() OVER (PARTITION BY patientId ORDER BY updatedOn DESC) rn
-    FROM patientvitalslogs
-  ) t
-  JOIN user u ON u.id = t.patientId
-  WHERE t.rn = 1
-  AND t.patientId IN (
-    SELECT patientId FROM patient_assignments WHERE caretakerId = ?
-  )
-  GROUP BY t.bloodGroup, u.gender
-`, [userId]);
+      SELECT 
+        t.bloodGroup,
+        u.gender,
+        COUNT(*) as count
+      FROM (
+        SELECT patientId, bloodGroup,
+               ROW_NUMBER() OVER (PARTITION BY patientId ORDER BY updatedOn DESC) rn
+        FROM patientvitalslogs
+        WHERE updatedOn BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)
+      ) t
+      JOIN user u ON u.id = t.patientId
+      WHERE t.rn = 1
+      AND t.patientId IN (
+        SELECT patientId FROM patient_assignments WHERE caretakerId = ?
+      )
+      GROUP BY t.bloodGroup, u.gender
+    `, [fromDate, toDate, userId]);
 
-const bloodGroups = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-", "Not Specified"];
+    const bloodGroups = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-", "Not Specified"];
+    const bloodGroupDistribution = bloodGroups.map(bg => ({
+      bloodGroup: bg, male: 0, female: 0, other: 0, total: 0
+    }));
 
-const bloodGroupDistribution = bloodGroups.map(bg => ({
-  bloodGroup: bg,
-  male: 0,
-  female: 0,
-  other: 0,
-  total: 0
-}));
-
-rawBloodGroupData.forEach(row => {
-  const group = bloodGroupDistribution.find(g => g.bloodGroup === row.bloodGroup) 
-    || bloodGroupDistribution.find(g => g.bloodGroup === "Not Specified");
-
-  if (!group) return;
-
-  const gender = row.gender?.toLowerCase();
-
-  if (gender === "male") group.male += row.count;
-  else if (gender === "female") group.female += row.count;
-  else group.other += row.count;
-
-  group.total += row.count;
-});
+    rawBloodGroupData.forEach(row => {
+      const group = bloodGroupDistribution.find(g => g.bloodGroup === row.bloodGroup)
+        || bloodGroupDistribution.find(g => g.bloodGroup === "Not Specified");
+      if (!group) return;
+      const gender = row.gender?.toLowerCase();
+      if (gender === "male") group.male += row.count;
+      else if (gender === "female") group.female += row.count;
+      else group.other += row.count;
+      group.total += row.count;
+    });
 
     // =========================
-    // 9️⃣ ALERTS
+    // 1️⃣1️⃣ ALERTS
     // =========================
     const [alerts] = await pool.query(`
       SELECT 
@@ -232,9 +235,10 @@ rawBloodGroupData.forEach(row => {
       LEFT JOIN user u_coach ON ri.coachId = u_coach.id
       LEFT JOIN user u_doctor ON ri.doctorId = u_doctor.id
       WHERE ri.coachId = ?
+      AND ri.raisedOn BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)
       ORDER BY ri.raisedOn DESC
       LIMIT 10
-    `, [userId]);
+    `, [userId, fromDate, toDate]);
 
     const formattedAlerts = alerts.map(a => ({
       id: a.id,
@@ -251,13 +255,11 @@ rawBloodGroupData.forEach(row => {
     const pendingAlerts = formattedAlerts.filter(a => a.status !== "completed").length;
 
     // =========================
-    // 🔥 FIXED: NEEDS ATTENTION (CORRECT DATA SOURCE)
+    // 1️⃣2️⃣ NEEDS ATTENTION
     // =========================
     const now = new Date();
-
     const notUpdatedPatients = allPatients.filter(v => {
       if (!v.updatedOn) return true;
-
       const diffHours = (now - new Date(v.updatedOn)) / (1000 * 60 * 60);
       return diffHours > 24;
     });
@@ -273,19 +275,16 @@ rawBloodGroupData.forEach(row => {
         pendingAlerts,
         overdueTasks
       },
-
       charts: {
         genderDistribution,
         ageDistribution,
         bloodGroupDistribution,
         taskProgress
       },
-
       alerts: {
         recentAlerts,
         notUpdatedPatients
       },
-
       patientVitals: patientVitals.map(v => ({
         id: v.patientId,
         name: v.name,

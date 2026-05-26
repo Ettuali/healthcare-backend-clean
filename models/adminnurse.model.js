@@ -26,8 +26,8 @@ const getAllNurses = async (options) => {
   const nurseRoleId = await getRoleIdByName("nurse");
 
   // Build the WHERE clause for searching
-  let whereClause = `WHERE ur.roleId = ?`;
-  params.push(nurseRoleId);
+let whereClause = `WHERE ur.roleId = ? AND u.status = 'Active'`;
+params.push(nurseRoleId);
 
   if (search) {
     whereClause += ` AND (u.name LIKE ? OR u.email LIKE ? OR u.phone LIKE ? OR u.city LIKE ? OR u.state LIKE ?)`;
