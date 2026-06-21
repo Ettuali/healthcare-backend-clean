@@ -62,6 +62,8 @@ const communicationSettingsRoutes = require("./communicationSettings.routes");
 const providerRoutes = require("./provider.routes");
 const templateRoutes = require("./template.routes");
 const notificationAdminRoutes = require("./notificationAdmin.routes");
+const turnRoutes =
+  require("./turn.routes");
 
 // ✅ MOUNT ROUTES
 
@@ -132,5 +134,9 @@ router.use("/ai", aiRoutes);
 router.use("/calls", callRoutes);
 
 router.use("/wounds", woundRoutes);
+router.use(
+  "/turn",
+  turnRoutes
+);
 
 module.exports = router;
