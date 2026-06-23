@@ -18,8 +18,5 @@ router.post(
   chatController.markRead
 );
 
-router.get(
-  "/unread/:userId",
-  chatController.getUnreadCounts
-);
+
 module.exports = router;
