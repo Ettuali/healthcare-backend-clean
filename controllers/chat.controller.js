@@ -309,4 +309,5 @@ module.exports = {
   setOnlineUsers,
   decodeUserId,
   markRead,
+  getUnreadCounts,
 };
