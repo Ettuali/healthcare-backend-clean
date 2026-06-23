@@ -113,4 +113,48 @@ module.exports = class Chats {
       throw error;
     }
   }
+/**
+ * Marks all unread messages as read.
+ */
+static async markRead(senderId, receiverId) {
+  try {
+    const [result] = await db.query(
+      `
+      UPDATE messages
+      SET \`read\` = 1
+      WHERE sender_id = ?
+        AND receiver_id = ?
+        AND \`read\` = 0
+      `,
+      [senderId, receiverId]
+    );
+
+    return result;
+  } catch (error) {
+    console.error("Error marking messages as read:", error);
+    throw error;
+  }
+}
+static async getUnreadCount(userId) {
+  try {
+    const [rows] = await db.query(
+      `
+      SELECT
+        sender_id,
+        COUNT(*) AS unreadCount
+      FROM messages
+      WHERE receiver_id = ?
+      AND \`read\` = 0
+      GROUP BY sender_id
+      `,
+      [userId]
+    );
+
+    return rows;
+  } catch (error) {
+    console.error(error);
+    throw error;
+  }
+}
 };
+

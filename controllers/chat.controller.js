@@ -199,10 +199,114 @@ const updateMsgStatus = async (req, res) => {
   }
 };
 
+// =========================
+// ✅ MARK MESSAGES AS READ
+// =========================
+const markRead = async (req, res) => {
+  console.log("\n--- [API] 👀 POST /api/communication/mark-read ---");
+
+  try {
+    const { senderId, receiverId } = req.body;
+
+    console.log("1. Received Body:", req.body);
+
+    if (!senderId || !receiverId) {
+      return res.status(400).json({
+        success: false,
+        message: "senderId and receiverId are required",
+      });
+    }
+
+    let processedSenderId;
+    let processedReceiverId;
+
+    try {
+      processedSenderId = parseInt(senderId, 10);
+
+      if (isNaN(processedSenderId)) {
+        const decrypted = await cryptoService.decrypt(
+          senderId,
+          "authentication"
+        );
+
+        processedSenderId = parseInt(decrypted, 10);
+      }
+    } catch (err) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid senderId",
+      });
+    }
+
+    try {
+      processedReceiverId = parseInt(receiverId, 10);
+
+      if (isNaN(processedReceiverId)) {
+        const decrypted = await cryptoService.decrypt(
+          receiverId,
+          "authentication"
+        );
+
+        processedReceiverId = parseInt(decrypted, 10);
+      }
+    } catch (err) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid receiverId",
+      });
+    }
+
+    console.log(
+      `2. Marking messages as read: ${processedSenderId} -> ${processedReceiverId}`
+    );
+
+    const result = await Chats.markRead(
+      processedSenderId,
+      processedReceiverId
+    );
+
+    console.log(
+      `3. ✅ SUCCESS: ${result.affectedRows} messages marked as read`
+    );
+
+    return res.status(200).json({
+      success: true,
+      affectedRows: result.affectedRows,
+      message: "Messages marked as read",
+    });
+  } catch (err) {
+    console.error("❌ MARK READ ERROR:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to mark messages as read",
+      error: err.message,
+    });
+  }
+};
+const getUnreadCounts = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const counts =
+      await Chats.getUnreadCount(userId);
+
+    res.json({
+      success: true,
+      data: counts,
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
 module.exports = {
   sendMsg,
   getMsgs,
   updateMsgStatus,
   setOnlineUsers,
   decodeUserId,
+  markRead,
 };
