@@ -13,5 +13,13 @@ router.put("/chats/:messageId/status", chatController.updateMsgStatus);
 // chat.routes.js
 router.get("/decode/:encryptedId", chatController.decodeUserId);
 
+router.post(
+  "/mark-read",
+  chatController.markRead
+);
 
+router.get(
+  "/unread/:userId",
+  chatController.getUnreadCounts
+);
 module.exports = router;
