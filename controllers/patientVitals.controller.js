@@ -71,11 +71,17 @@ const createVitals = async (req, res) => {
   }
 };
 
-// READ (PAGINATED + FIXED)
+// READ (PAGINATED + FILTERS + AGGREGATES SUMMARY)
 const getVitalsByPatient = async (req, res) => {
   try {
     const { patientId } = req.params;
-    let { page = 1, limit = 5 } = req.query;
+    let {
+      page = 1,
+      limit = 5,
+      period = "all",
+      fromDate,
+      toDate,
+    } = req.query;
 
     // ✅ validate pagination
     const pageNum = Math.max(1, parseInt(page) || 1);
@@ -83,15 +89,17 @@ const getVitalsByPatient = async (req, res) => {
 
     const resolvedPatientId = await resolvePatientId(patientId);
 
-    // console.log("Incoming ID:", patientId);
-    // console.log("Resolved ID:", resolvedPatientId);
-
+    // Fetch paginated details along with calculated summaries from the model
     const result = await patientVitalsModel.fetchPatientVitalsByPatientId(
       resolvedPatientId,
       pageNum,
-      limitNum
+      limitNum,
+      period,
+      fromDate,
+      toDate
     );
 
+    // Encrypt response identifiers securely
     const encryptedVitals = await Promise.all(
       result.data.map(async (vital) => ({
         ...vital,
@@ -104,6 +112,7 @@ const getVitalsByPatient = async (req, res) => {
 
     res.status(200).json({
       success: true,
+      summary: result.summary,
       data: encryptedVitals,
       pagination: result.pagination,
     });

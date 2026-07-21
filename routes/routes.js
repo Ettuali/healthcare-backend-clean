@@ -64,6 +64,10 @@ const templateRoutes = require("./template.routes");
 const notificationAdminRoutes = require("./notificationAdmin.routes");
 const turnRoutes =
   require("./turn.routes");
+  const deviceTokenRoutes =
+  require("./deviceToken.routes");
+  const firebaseRoutes =
+  require("./firebase.routes");
 
 // ✅ MOUNT ROUTES
 
@@ -137,6 +141,14 @@ router.use("/wounds", woundRoutes);
 router.use(
   "/turn",
   turnRoutes
+);
+router.use(
+  "/communication",
+  deviceTokenRoutes
+);
+router.use(
+  "/communication",
+  firebaseRoutes
 );
 
 module.exports = router;

@@ -9,6 +9,8 @@ const notificationController = {
     // Paginated list of the current user's in-app notifications
     // =========================================================
     list: async (req, res) => {
+        console.log("===== NOTIFICATION LIST =====");
+        console.log("Authenticated User:", req.user.id);
         try {
             const userId = req.user && req.user.id;
             if (!userId) {
@@ -29,6 +31,13 @@ const notificationController = {
                 limit: limitNum,
                 onlyUnread: onlyUnread === "true",
                 channel: "inapp",
+            });
+
+            // FIXED: Removed the non-existent 'rows' variable console.log
+            console.log({
+                userId,
+                totalCount,
+                returned: data.length,
             });
 
             res.status(200).json({
@@ -110,6 +119,7 @@ const notificationController = {
             res.status(500).json({ message: "Internal server error" });
         }
     },
+
     deliveryLogs: async (req, res) => {
         try {
             const { page = 0, limit = 20, channel, status, eventType } = req.query;

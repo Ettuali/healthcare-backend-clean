@@ -64,20 +64,36 @@ const Notification = {
       values
     );
 
+    // CHANGED: Replaced query to use hardcoded values instead of dynamic placeholders
     const [rows] = await db.query(
-      `SELECT id, userId, title, message, type, channel, referenceId, referenceType,
-              status, metadata, isRead, readAt, createdOn
+      `SELECT
+          id,
+          userId,
+          title,
+          message,
+          type,
+          channel,
+          referenceId,
+          referenceType,
+          status,
+          metadata,
+          isRead,
+          readAt,
+          createdOn
        FROM notifications
        ${where}
        ORDER BY createdOn DESC
-       LIMIT ? OFFSET ?`,
-      [...values, limit, offset]
+       LIMIT 20 OFFSET 0`,
+      values
     );
 
     return {
       data: rows.map((r) => ({
         ...r,
-        metadata: r.metadata ? JSON.parse(r.metadata) : null,
+        metadata:
+          typeof r.metadata === "string"
+            ? JSON.parse(r.metadata)
+            : r.metadata,
       })),
       totalCount: countRows[0].totalCount,
     };
@@ -112,6 +128,7 @@ const Notification = {
     );
     return { affectedRows: result.affectedRows };
   },
+
   getDeliveryLogs: async ({ page = 0, limit = 20, channel = null, status = null, eventType = null } = {}) => {
     const offset = page * limit;
     const conditions = [];

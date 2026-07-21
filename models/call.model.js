@@ -16,10 +16,11 @@ class Call {
   // =========================
   // ✅ ADD PARTICIPANTS (SAFE)
   // =========================
-  static async addParticipants(callId, users = []) {
-    const uniqueUsers = [...new Set(users)];
+  static async addParticipants(callId, participants = []) {
+    // Deduplicate the array of participant IDs
+    const uniqueParticipants = [...new Set(participants)];
 
-    for (let userId of uniqueUsers) {
+    for (let userId of uniqueParticipants) {
       if (!userId) continue;
 
       await db.query(

@@ -15,6 +15,12 @@ const Template = require("../models/template.model");
 const emitter = require("../realtime/emitter");
 
 // =====================================================
+// EXISTING SERVICE REUSE
+// =====================================================
+const { sendPushNotification } = require("./firebase.service"); 
+const DeviceToken = require("../models/deviceToken.model");
+
+// =====================================================
 // CHANNEL DISPATCHERS
 // =====================================================
 
@@ -26,8 +32,7 @@ const dispatchers = {
     message,
     config,
     secrets,
-}) => {
-
+  }) => {
     return sendEmail({
         providerKey,
         to,
@@ -44,8 +49,7 @@ const dispatchers = {
     message,
     config,
     secrets,
-}) => {
-
+  }) => {
     return sendSMS({
         providerKey,
         to,
@@ -61,8 +65,7 @@ const dispatchers = {
     message,
     config,
     secrets,
-}) => {
-
+  }) => {
     return sendWhatsapp({
         providerKey,
         to,
@@ -97,7 +100,6 @@ const sendNotification = async ({
   // =====================================================
 
   let activeChannels = channels;
-
   let settingsByChannel = {};
 
   try {
@@ -108,7 +110,6 @@ const sendNotification = async ({
 
       settingsByChannel = settings.reduce((acc, s) => {
         acc[s.channel] = s;
-
         return acc;
       }, {});
     }
@@ -127,7 +128,6 @@ const sendNotification = async ({
 
   const resolveContent = async (channel) => {
     const setting = settingsByChannel[channel];
-
     let tpl = null;
 
     try {
@@ -145,7 +145,6 @@ const sendNotification = async ({
     if (tpl) {
       return {
         subject: tpl.subject ? render(tpl.subject, renderData) : subject,
-
         body: render(tpl.body, renderData),
       };
     }
@@ -163,21 +162,13 @@ const sendNotification = async ({
   const persist = (channel, content) => {
     return Notification.create({
       userId,
-
       title: content.subject || subject,
-
       message: content.body,
-
       type,
-
       channel,
-
       referenceId,
-
       referenceType,
-
       status: "pending",
-
       metadata,
     });
   };
@@ -195,7 +186,6 @@ const sendNotification = async ({
 
     if (!to) {
       results[channel] = "skipped_no_recipient";
-
       continue;
     }
 
@@ -205,19 +195,16 @@ const sendNotification = async ({
       // =========================================
       // TEMPLATE CONTENT
       // =========================================
-
       const content = await resolveContent(channel);
 
       // =========================================
       // PERSIST
       // =========================================
-
       row = await persist(channel, content);
 
       // =========================================
       // RESOLVE DEFAULT PROVIDER
       // =========================================
-
       const providerResolution = await resolveDefaultProvider({
         providerType: channel,
       });
@@ -227,14 +214,11 @@ const sendNotification = async ({
       // =========================================
       // DISPATCH
       // =========================================
-
       await dispatchers[channel]({
         providerKey,
         to,
         subject: content.subject,
-
         message: content.body,
-
         config,
         secrets,
       });
@@ -242,12 +226,10 @@ const sendNotification = async ({
       // =========================================
       // UPDATE STATUS
       // =========================================
-
       await Notification.updateStatus(row.id, "sent");
 
       results[channel] = {
         status: "sent",
-
         provider: providerKey,
       };
     } catch (err) {
@@ -259,7 +241,6 @@ const sendNotification = async ({
 
       results[channel] = {
         status: "failed",
-
         error: err.message,
       };
     }
@@ -275,50 +256,66 @@ const sendNotification = async ({
 
       const row = await Notification.create({
         userId,
-
         title: content.subject || subject,
-
         message: content.body,
-
         type,
-
         channel: "inapp",
-
         referenceId,
-
         referenceType,
-
         status: "sent",
-
         metadata,
       });
 
       results.inapp = "sent";
-
       results.inappId = row.id;
+
+      // =====================================================
+      // MEDICAL ALERT FCM PUSH INTEGRATION
+      // =====================================================
+      if (type === "medical_alert") {
+        try {
+          const devices = await DeviceToken.getTokens(userId);
+          if (devices && devices.length > 0) {
+            for (const device of devices) {
+              const token = device.fcm_token;
+              
+              if (!token) continue;
+
+              try {
+                await sendPushNotification({
+                  token,
+                  title: content.subject || subject,
+                  body: content.body,
+                  data: {
+                    type: "medical_alert",
+                    notificationId: String(row.id),
+                    referenceId: referenceId ? String(referenceId) : "",
+                    referenceType: referenceType ? String(referenceType) : "",
+                  }
+                });
+              } catch (err) {
+                console.error("FCM Error:", err.message);
+              }
+            }
+          }
+        } catch (tokenErr) {
+          console.error(`[FCM Device Lookup Error]:`, tokenErr.message);
+        }
+      }
 
       emitter.toUser(userId, "notification:new", {
         id: row.id,
-
         title: content.subject || subject,
-
         message: content.body,
-
         type,
-
         referenceType,
-
         referenceId,
-
         metadata,
-
         createdOn: new Date().toISOString(),
-
         isRead: 0,
       });
     } catch (err) {
       console.error("INAPP ERROR:", err.message);
-
       results.inapp = "failed";
     }
   }

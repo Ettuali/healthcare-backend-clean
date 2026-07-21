@@ -1,6 +1,11 @@
 const Chats = require("../models/chat.model");
 const cryptoService = require("../services/crypto.service");
-
+const DeviceToken =
+  require("../models/deviceToken.model");
+const User = require("../models/user.model");
+const {
+  sendPushNotification,
+} = require("../services/firebase.service");
 // A simple in-memory store for online users.
 const onlineUsers = new Map();
 
@@ -79,13 +84,70 @@ const sendMsg = async (req, res) => {
     
     console.log("3. Inserting into database with payload:", dbPayload);
     const result = await Chats.InsertMsg(dbPayload);
+    const sender = await User.getContactById(
+  processedSenderId
+);
 
-    console.log("4. ✅ SUCCESS: Database insertion result:", result);
-    res.status(201).json({
-      success: true,
-      message: "Message sent successfully",
-      result: { insertId: result.insertId },
+const senderName =
+  sender?.name || "New Message";
+console.log(
+  "4. ✅ SUCCESS: Database insertion result:",
+  result
+);
+
+// ======================================
+// SEND PUSH NOTIFICATION
+// ======================================
+
+try {
+  const tokens =
+    await DeviceToken.getTokens(
+      processedReceiverId
+    );
+
+  console.log(
+    `📱 Found ${tokens.length} device token(s)`
+  );
+
+  for (const row of tokens) {
+    await sendPushNotification({
+      token: row.fcm_token,
+
+      title: senderName,
+
+      body:
+  message.length > 100
+    ? `${message.substring(0, 100)}...`
+    : message,
+
+      data: {
+  type: "chat",
+  senderId: processedSenderId.toString(),
+  senderName: senderName,
+  receiverId: processedReceiverId.toString(),
+},
     });
+  }
+
+  console.log(
+    `✅ Push notification sent`
+  );
+} catch (pushErr) {
+  console.error(
+    "❌ Push notification error:",
+    pushErr
+  );
+}
+
+// ======================================
+
+res.status(201).json({
+  success: true,
+  message: "Message sent successfully",
+  result: {
+    insertId: result.insertId,
+  },
+});
 
   } catch (err) {
     console.error("   - ❌ SERVER ERROR in sendMsg:", err);

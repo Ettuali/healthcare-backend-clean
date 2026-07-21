@@ -13,7 +13,17 @@ async function resolveUserId(userId) {
 // Generate presigned URL from MinIO
 async function generatePresignedUrl(imagePath) {
   if (!imagePath) return null;
-  return minioClient.presignedGetObject(BUCKET_NAME, imagePath, 60 * 60); // 1 hour
+
+  const url = await minioClient.presignedGetObject(
+    BUCKET_NAME,
+    imagePath,
+    60 * 60
+  );
+
+  return url.replace(
+    "http://localhost:9000",
+    process.env.MINIO_PUBLIC_URL
+  );
 }
 
 const woundController = {

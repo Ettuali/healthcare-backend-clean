@@ -38,8 +38,10 @@ wss.on("connection", (ws) => {
         ws.userId = userId;
         onlineUsers.set(userId, ws);
 
-        console.log(`🟢 User ${userId} connected`);
-        console.log("🟢 ONLINE USERS:", Array.from(onlineUsers.keys()));
+        console.log("================================");
+        console.log(`🟢 User ${userId} registered`);
+        console.log("ONLINE:", [...onlineUsers.keys()]);
+        console.log("================================");
         return;
       }
 
@@ -51,6 +53,12 @@ wss.on("connection", (ws) => {
 
         receivers.forEach((receiverId) => {
           const id = String(receiverId);
+          
+          console.log("===== CALL REQUEST =====");
+          console.log("Target:", id);
+          console.log("ONLINE:", [...onlineUsers.keys()]);
+          console.log("========================");
+
           const socket = onlineUsers.get(id);
 
           if (socket && socket.readyState === WebSocket.OPEN) {
@@ -172,9 +180,12 @@ wss.on("connection", (ws) => {
 // =======================
 setInterval(() => {
   onlineUsers.forEach((socket, userId) => {
-    if (socket.readyState !== WebSocket.OPEN) {
+    if (
+      socket.readyState === WebSocket.CLOSING ||
+      socket.readyState === WebSocket.CLOSED
+    ) {
       onlineUsers.delete(userId);
-      console.log(`🧹 Cleaned stale user ${userId}`);
+      console.log(`🧹 Removed closed socket for ${userId}`);
     }
   });
 }, 30000);
@@ -208,6 +219,6 @@ cron.schedule("* * * * *", async () => {
 // 🔹 START
 // =======================
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
-  console.log(`🚀 http://localhost:${PORT}`);
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 Server running on port ${PORT}`);
 });
