@@ -4,110 +4,119 @@ const cryptoService = require("../services/crypto.service");
 const fs = require("fs");
 const path = require("path");
 
+// 1. Helper function to replace local MinIO URLs with public URL
+function toPublicMinioUrl(url) {
+  if (!url) return url;
+  return url.replace(
+    /^http:\/\/(localhost|127\.0\.0\.1):9000/,
+    process.env.MINIO_PUBLIC_URL
+  );
+}
+
 const userDocumentController = {
 
   // ✅ CREATE DOCUMENT
-createDocument: async (req, res) => {
-  try {
-    console.log("🔥 BODY:", req.body);
-    console.log("🔥 FILE:", req.file);
-    console.log("🔥 USER:", req.user);
-
-    const {
-      patientUserId,
-      uploaderRole,
-      documentName,
-      documentType,
-    } = req.body;
-
-    // ✅ Validation
-    if (!patientUserId || !uploaderRole || !req.file) {
-      return res.status(400).json({
-        success: false,
-        message: "Missing required fields",
-      });
-    }
-
-    // ✅ Decrypt encrypted patient ID
-    let decryptedId;
-
+  createDocument: async (req, res) => {
     try {
-      decryptedId = await cryptoService.decrypt(
+      console.log("🔥 BODY:", req.body);
+      console.log("🔥 FILE:", req.file);
+      console.log("🔥 USER:", req.user);
+
+      const {
         patientUserId,
-        "authentication"
+        uploaderRole,
+        documentName,
+        documentType,
+      } = req.body;
+
+      // ✅ Validation
+      if (!patientUserId || !uploaderRole || !req.file) {
+        return res.status(400).json({
+          success: false,
+          message: "Missing required fields",
+        });
+      }
+
+      // ✅ Decrypt encrypted patient ID
+      let decryptedId;
+
+      try {
+        decryptedId = await cryptoService.decrypt(
+          patientUserId,
+          "authentication"
+        );
+      } catch (decryptError) {
+        console.error("❌ DECRYPT ERROR:", decryptError);
+
+        return res.status(400).json({
+          success: false,
+          message: "Invalid encrypted patient ID",
+        });
+      }
+
+      // ✅ Convert to integer
+      const parsedPatientId = parseInt(decryptedId);
+
+      // ✅ Uploaded by logged-in user
+      const uploadedBy = req.user?.id || req.user?.userId;
+
+      // ✅ Final validation
+      if (isNaN(parsedPatientId) || !uploadedBy) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid IDs",
+        });
+      }
+
+      // ✅ Local uploaded file path
+      const filePath = req.file.path;
+
+      // ✅ Generate unique filename
+      const fileName = `${Date.now()}-${path.basename(req.file.originalname)}`;
+
+      // ✅ Upload to MinIO
+      await minioClient.fPutObject(
+        BUCKET_NAME,
+        fileName,
+        filePath
       );
-    } catch (decryptError) {
-      console.error("❌ DECRYPT ERROR:", decryptError);
 
-      return res.status(400).json({
+      // ✅ Remove local temp file
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+
+      // ✅ Prepare DB object
+      const documentData = {
+        patientUserId: parsedPatientId,
+        uploadedBy,
+        uploaderRole,
+        documentName: documentName || "Untitled",
+        imagePath: fileName,
+        documentType: documentType || "prescription",
+      };
+
+      // ✅ Save in DB
+      const newDoc = await UserDocument.create(documentData);
+
+      // ✅ Success response
+      return res.status(201).json({
+        success: true,
+        message: "Document uploaded successfully",
+        documentId: newDoc.insertId,
+        data: documentData,
+      });
+
+    } catch (err) {
+      console.error("❌ UPLOAD ERROR:", err);
+
+      return res.status(500).json({
         success: false,
-        message: "Invalid encrypted patient ID",
+        message: "Internal server error",
+        error: err.message,
       });
     }
-
-    // ✅ Convert to integer
-    const parsedPatientId = parseInt(decryptedId);
-
-    // ✅ Uploaded by logged-in user
-    const uploadedBy = req.user?.id || req.user?.userId;
-
-    // ✅ Final validation
-    if (isNaN(parsedPatientId) || !uploadedBy) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid IDs",
-      });
-    }
-
-    // ✅ Local uploaded file path
-    const filePath = req.file.path;
-
-    // ✅ Generate unique filename
-    const fileName = `${Date.now()}-${path.basename(req.file.originalname)}`;
-
-    // ✅ Upload to MinIO
-    await minioClient.fPutObject(
-      BUCKET_NAME,
-      fileName,
-      filePath
-    );
-
-    // ✅ Remove local temp file
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
-
-    // ✅ Prepare DB object
-    const documentData = {
-      patientUserId: parsedPatientId,
-      uploadedBy,
-      uploaderRole,
-      documentName: documentName || "Untitled",
-      imagePath: fileName,
-      documentType: documentType || "prescription",
-    };
-
-    // ✅ Save in DB
-    const newDoc = await UserDocument.create(documentData);
-
-    // ✅ Success response
-    return res.status(201).json({
-      success: true,
-      message: "Document uploaded successfully",
-      documentId: newDoc.insertId,
-      data: documentData,
-    });
-
-  } catch (err) {
-    console.error("❌ UPLOAD ERROR:", err);
-
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-      error: err.message,
-    });
-  }
-},
+  },
 
   // ✅ COMMON HELPER
   _generatePresignedUrls: async (docs) => {
@@ -121,7 +130,10 @@ createDocument: async (req, res) => {
             doc.imagePath,
             60 * 60
           );
-          return { ...doc, imageUrl: url };
+          return {
+            ...doc,
+            imageUrl: toPublicMinioUrl(url),
+          };
         }
         return doc;
       })
@@ -218,7 +230,13 @@ createDocument: async (req, res) => {
         60 * 60
       );
 
-      res.json({ success: true, data: { ...doc, imageUrl: url } });
+      res.json({
+        success: true,
+        data: {
+          ...doc,
+          imageUrl: toPublicMinioUrl(url),
+        },
+      });
 
     } catch (err) {
       console.error(err);
@@ -247,7 +265,13 @@ createDocument: async (req, res) => {
         60 * 60
       );
 
-      res.json({ success: true, data: { ...doc, imageUrl: url } });
+      res.json({
+        success: true,
+        data: {
+          ...doc,
+          imageUrl: toPublicMinioUrl(url),
+        },
+      });
 
     } catch (err) {
       console.error(err);
