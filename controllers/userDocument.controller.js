@@ -4,15 +4,6 @@ const cryptoService = require("../services/crypto.service");
 const fs = require("fs");
 const path = require("path");
 
-// 1. Helper function to replace local MinIO URLs with public URL
-function toPublicMinioUrl(url) {
-  if (!url) return url;
-  return url.replace(
-    /^http:\/\/(localhost|127\.0\.0\.1):9000/,
-    process.env.MINIO_PUBLIC_URL
-  );
-}
-
 const userDocumentController = {
 
   // ✅ CREATE DOCUMENT
@@ -132,7 +123,7 @@ const userDocumentController = {
           );
           return {
             ...doc,
-            imageUrl: toPublicMinioUrl(url),
+            imageUrl: url,
           };
         }
         return doc;
@@ -234,7 +225,7 @@ const userDocumentController = {
         success: true,
         data: {
           ...doc,
-          imageUrl: toPublicMinioUrl(url),
+          imageUrl: url,
         },
       });
 
@@ -269,7 +260,7 @@ const userDocumentController = {
         success: true,
         data: {
           ...doc,
-          imageUrl: toPublicMinioUrl(url),
+          imageUrl: url,
         },
       });
 

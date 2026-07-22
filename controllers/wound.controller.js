@@ -20,11 +20,7 @@ async function generatePresignedUrl(imagePath) {
     60 * 60
   );
 
-return url.replace(
-  /^http:\/\/(localhost|127\.0\.0\.1):9000/,
-  process.env.MINIO_PUBLIC_URL
-);
-
+  return url;
 }
 
 const woundController = {
@@ -92,37 +88,37 @@ const woundController = {
   },
 
   fetchLatestWoundEntry: async (req, res) => {
-  try {
-    const decryptedUserId = await resolveUserId(req.params.userId);
+    try {
+      const decryptedUserId = await resolveUserId(req.params.userId);
 
-    const wound = await Wound.getLatestByUserId(decryptedUserId);
+      const wound = await Wound.getLatestByUserId(decryptedUserId);
 
-    // No wound is a VALID empty state
-    if (!wound) {
+      // No wound is a VALID empty state
+      if (!wound) {
+        return res.status(200).json({
+          success: true,
+          data: null,
+        });
+      }
+
+      wound.imageUrl = await generatePresignedUrl(
+        wound.imagePath
+      );
+
       return res.status(200).json({
         success: true,
-        data: null,
+        data: wound,
+      });
+
+    } catch (err) {
+      console.error("Fetch latest wound error:", err);
+
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
       });
     }
-
-    wound.imageUrl = await generatePresignedUrl(
-      wound.imagePath
-    );
-
-    return res.status(200).json({
-      success: true,
-      data: wound,
-    });
-
-  } catch (err) {
-    console.error("Fetch latest wound error:", err);
-
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-    });
-  }
-},
+  },
 
   updateWoundFeedback: async (req, res) => {
     try {
