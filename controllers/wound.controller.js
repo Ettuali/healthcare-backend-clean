@@ -20,10 +20,11 @@ async function generatePresignedUrl(imagePath) {
     60 * 60
   );
 
-  return url.replace(
-    "http://localhost:9000",
-    process.env.MINIO_PUBLIC_URL
-  );
+return url.replace(
+  /^http:\/\/(localhost|127\.0\.0\.1):9000/,
+  process.env.MINIO_PUBLIC_URL
+);
+
 }
 
 const woundController = {
