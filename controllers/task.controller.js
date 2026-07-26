@@ -114,11 +114,13 @@ exports.getTaskDetails = async (req, res) => {
   }
 };
 
-// Get all tasks for a specific patient (Read)
+// 🟢 Get all tasks for a specific patient with period filter (Read)
 exports.getTasksForPatient = async (req, res) => {
   try {
     const { patientId } = req.params;
-    const tasks = await Task.getTasksByAssignedToId(patientId);
+    const { period } = req.query; // Extract period filter from query string
+
+    const tasks = await Task.getTasksByAssignedToId(patientId, period || 'all');
     res.status(200).json(tasks);
   } catch (err) {
     console.error('Error fetching tasks for patient:', err);
@@ -179,16 +181,18 @@ exports.getTasksForCaretaker = async (req, res) => {
   }
 };
 
-// Get all tasks by patient (with encrypted patientId in URL)
-exports.getTasksByPatient= async (req, res) => {
+// 🟢 Get all tasks by patient (with encrypted patientId in URL + period filter)
+exports.getTasksByPatient = async (req, res) => {
   try {
     const { patientId } = req.params;
+    const { period } = req.query; // Extract period filter from query string
+
     if (!patientId) {
       return res.status(400).json({ message: 'Missing required field: patientId.' });
     }
 
     const decryptedPatientId = await cryptoService.decrypt(patientId, 'authentication');
-    const tasks = await Task.getTasksByAssignedToId(decryptedPatientId);
+    const tasks = await Task.getTasksByAssignedToId(decryptedPatientId, period || 'all');
 
     res.status(200).json(tasks);
   } catch (err) {

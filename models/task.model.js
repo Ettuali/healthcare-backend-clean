@@ -19,15 +19,40 @@ class Task {
   }
 
   // =========================
-  // GET TASKS FOR PATIENT
+  // GET TASKS FOR PATIENT (WITH PERIOD FILTER)
   // =========================
-  static async getTasksByAssignedToId(patientId) {
-    const [rows] = await db.query(
-      `SELECT * FROM tasks 
-       WHERE assigned_to = ?
-       ORDER BY created_at DESC`,
-      [patientId]
-    );
+  static async getTasksByAssignedToId(patientId, period = 'all') {
+    let dateCondition = '';
+
+    switch (period) {
+      case 'last_week':
+        dateCondition = 'AND created_at >= NOW() - INTERVAL 7 DAY';
+        break;
+      case 'last_month':
+        dateCondition = 'AND created_at >= NOW() - INTERVAL 1 MONTH';
+        break;
+      case '3_months':
+        dateCondition = 'AND created_at >= NOW() - INTERVAL 3 MONTH';
+        break;
+      case '6_months':
+        dateCondition = 'AND created_at >= NOW() - INTERVAL 6 MONTH';
+        break;
+      case '1_year':
+        dateCondition = 'AND created_at >= NOW() - INTERVAL 1 YEAR';
+        break;
+      case 'all':
+      default:
+        dateCondition = '';
+        break;
+    }
+
+    const query = `
+      SELECT * FROM tasks 
+      WHERE assigned_to = ? ${dateCondition}
+      ORDER BY created_at DESC
+    `;
+
+    const [rows] = await db.query(query, [patientId]);
     return rows;
   }
 
@@ -85,7 +110,6 @@ class Task {
   // UPDATE TASK STATUS (SMART)
   // =========================
   static async updateTaskStatus(taskId, newStatus) {
-
     const validStatuses = ["pending", "in_progress", "completed"];
     newStatus = newStatus.toLowerCase();
 
@@ -98,14 +122,10 @@ class Task {
 
     const currentStatus = task.status?.toLowerCase();
 
-    // Prevent useless updates
     if (currentStatus === newStatus) {
       return { message: "No change in status" };
     }
 
-    // =========================
-    // STATUS TRANSITIONS
-    // =========================
     if (newStatus === "in_progress" && currentStatus === "pending") {
       await db.query(
         `UPDATE tasks 
@@ -113,28 +133,21 @@ class Task {
          WHERE id = ?`,
         ["in_progress", taskId]
       );
-    }
-
-    else if (newStatus === "completed") {
+    } else if (newStatus === "completed") {
       await db.query(
         `UPDATE tasks 
          SET status = ?, completed_at = NOW(), updated_at = NOW()
          WHERE id = ?`,
         ["completed", taskId]
       );
-    }
-
-    else if (newStatus === "pending") {
-      // optional reset
+    } else if (newStatus === "pending") {
       await db.query(
         `UPDATE tasks 
          SET status = ?, started_at = NULL, completed_at = NULL, updated_at = NOW()
          WHERE id = ?`,
         ["pending", taskId]
       );
-    }
-
-    else {
+    } else {
       throw new Error(`Invalid transition from ${currentStatus} to ${newStatus}`);
     }
 
