@@ -1,16 +1,15 @@
 const MedicationIntake = require("../models/medicationIntake.model");
 const cryptoService = require("../services/crypto.service");
 
-
 // Helper: validate intake payload
 const validateIntake = (data, res) => {
-if (
-  !data.patientId ||
-  !data.medicineAssignmentId ||
-  !data.scheduleId ||
-  !data.intakeDate ||
-  !data.intakeTime
-) {
+  if (
+    !data.patientId ||
+    !data.medicineAssignmentId ||
+    !data.scheduleId ||
+    !data.intakeDate ||
+    !data.intakeTime
+  ) {
     res.status(400).json({ success: false, error: "Missing required fields" });
     return false;
   }
@@ -23,7 +22,7 @@ if (
 };
 
 const medicationIntakeController = {
-  // ✅ LOG INTAKE (REFACTORED)
+  // ✅ LOG INTAKE
   logIntake: async (req, res) => {
     try {
       let intakeData = { ...req.body };
@@ -46,13 +45,13 @@ const medicationIntakeController = {
       intakeData.status = intakeData.status || "taken";
       intakeData.notes = intakeData.notes || null;
 
-      // 3. Model Logic (Find or Update/Insert)
-const existing = await MedicationIntake.findExistingLog(
-  intakeData.patientId,
-  intakeData.medicineAssignmentId,
-  intakeData.scheduleId,
-  intakeData.intakeDate
-);
+      // 3. Model Logic
+      const existing = await MedicationIntake.findExistingLog(
+        intakeData.patientId,
+        intakeData.medicineAssignmentId,
+        intakeData.scheduleId,
+        intakeData.intakeDate
+      );
 
       let logId;
       if (existing.length > 0) {
@@ -86,15 +85,16 @@ const existing = await MedicationIntake.findExistingLog(
     }
   },
 
-  // ✅ GET HISTORY (Standard)
+  // 🟢 GET HISTORY (Standard with Period Filter)
   getIntakeHistory: async (req, res) => {
     try {
       const { patientId } = req.params;
       const limit = parseInt(req.query.limit, 10) || 10;
       const offset = parseInt(req.query.offset, 10) || 0;
+      const period = req.query.period || 'all'; // 🟢 Extract period filter
 
-      const totalCount = await MedicationIntake.getTotalHistoryCount(patientId);
-      const history = await MedicationIntake.getHistoryByPatientId(patientId, limit, offset);
+      const totalCount = await MedicationIntake.getTotalHistoryCount(patientId, period);
+      const history = await MedicationIntake.getHistoryByPatientId(patientId, limit, offset, period);
 
       res.json({
         success: true,
@@ -106,7 +106,7 @@ const existing = await MedicationIntake.findExistingLog(
     }
   },
 
-  // ✅ GET HISTORY (Encrypted)
+  // 🟢 GET HISTORY (Encrypted with Period Filter)
   getIntakeHistoryEncrypted: async (req, res) => {
     try {
       const { patientId } = req.params;
@@ -114,11 +114,12 @@ const existing = await MedicationIntake.findExistingLog(
       
       const limit = parseInt(req.query.limit, 10) || 10;
       const offset = parseInt(req.query.offset, 10) || 0;
+      const period = req.query.period || 'all'; // 🟢 Extract period filter
 
-      const totalCount = await MedicationIntake.getTotalHistoryCount(decryptedId);
-      const history = await MedicationIntake.getHistoryByPatientId(decryptedId, limit, offset);
+      const totalCount = await MedicationIntake.getTotalHistoryCount(decryptedId, period);
+      const history = await MedicationIntake.getHistoryByPatientId(decryptedId, limit, offset, period);
 
-      res.json({ success: true, data: history, pagination: { total: totalCount } });
+      res.json({ success: true, data: history, pagination: { total: totalCount, limit, offset } });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
     }
