@@ -129,6 +129,11 @@ const sendNotification = async ({
   metadata = {},
   templateData = {},
 }) => {
+  // 1️⃣ LOG: START
+  console.log("========== sendNotification ==========");
+  console.log("TYPE:", type);
+  console.log("USER:", userId);
+
   const results = {};
 
   // =====================================================
@@ -149,6 +154,10 @@ const sendNotification = async ({
         return acc;
       }, {});
     }
+
+    // 2️⃣ LOG: AFTER getEnabledForEvent()
+    console.log("SETTINGS:", settings);
+    console.log("ACTIVE CHANNELS:", activeChannels);
   } catch (err) {
     console.error("[notification] settings lookup failed:", err.message);
   }
@@ -195,8 +204,8 @@ const sendNotification = async ({
   // PERSIST HELPER
   // =====================================================
 
-  const persist = (channel, content) => {
-    return Notification.create({
+  const persist = async (channel, content) => {
+    const row = await Notification.create({
       userId,
       title: content.subject || subject,
       message: content.body,
@@ -207,6 +216,10 @@ const sendNotification = async ({
       status: "pending",
       metadata,
     });
+
+    // 3️⃣ LOG: AFTER Notification.create()
+    console.log("Notification inserted:", row);
+    return row;
   };
 
   // =====================================================
@@ -302,22 +315,25 @@ const sendNotification = async ({
         metadata,
       });
 
+      // 3️⃣ LOG: AFTER Notification.create() for In-App
+      console.log("Notification inserted:", row);
+
       results.inapp = "sent";
       results.inappId = row.id;
 
       // =====================================================
       // GENERALIZED FCM PUSH INTEGRATION
       // =====================================================
-    const pushEnabledTypes = [
-  "medical_alert",
-  "patient_assignment",
-  "care_team_assignment",
-  "medicine_assigned",
-  "medicine_due_soon",
-  "medicine_time",
-  "medicine_pending",
-  "medicine_missed",
-];
+      const pushEnabledTypes = [
+        "medical_alert",
+        "patient_assignment",
+        "care_team_assignment",
+        "medicine_assigned",
+        "medicine_due_soon",
+        "medicine_time",
+        "medicine_pending",
+        "medicine_missed",
+      ];
 
       if (pushEnabledTypes.includes(type)) {
         await sendFcmToUser({
@@ -347,6 +363,9 @@ const sendNotification = async ({
       results.inapp = "failed";
     }
   }
+
+  // 4️⃣ LOG: END
+  console.log("Returning:", results);
 
   return results;
 };

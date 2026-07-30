@@ -94,7 +94,9 @@ const assignMedicineToPatient = async (req, res) => {
     // SEND NOTIFICATION TO PATIENT
     // =====================================================
     try {
-      await sendNotification({
+      console.log("🚀 Calling sendNotification for patient:", patientId);
+      console.log("🚀 Before sendNotification");
+      const notificationResult = await sendNotification({
         userId: patientId,
         type: "medicine_assigned",
         subject: "New Medicine Assigned",
@@ -110,6 +112,8 @@ const assignMedicineToPatient = async (req, res) => {
           startDate,
         },
       });
+
+      console.log("✅ Notification Result:", notificationResult);
     } catch (notificationError) {
       console.error(
         "Medicine assignment notification failed:",
