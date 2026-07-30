@@ -312,7 +312,7 @@ const sendNotification = async ({
   "medical_alert",
   "patient_assignment",
   "care_team_assignment",
-
+  "medicine_assigned",
   "medicine_due_soon",
   "medicine_time",
   "medicine_pending",
