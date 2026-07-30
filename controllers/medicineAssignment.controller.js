@@ -1,4 +1,5 @@
 const medicineAssignmentModel = require("../models/medicineAssignment.model");
+const { sendNotification } = require("../services/notification.service");
 
 // 🔥 COMMON VALIDATION (no duplication)
 const validateSchedule = (schedule, res) => {
@@ -31,7 +32,6 @@ const normalizeSchedule = (schedule) => {
   }));
 };
 
-
 // ✅ ASSIGN MEDICINE
 const assignMedicineToPatient = async (req, res) => {
   try {
@@ -59,7 +59,7 @@ const assignMedicineToPatient = async (req, res) => {
       });
     }
 
-    // 🔥 date validation
+    // 🔥 Date validation
     if (endDate && new Date(endDate) < new Date(startDate)) {
       return res.status(400).json({
         success: false,
@@ -70,6 +70,7 @@ const assignMedicineToPatient = async (req, res) => {
     if (!validateSchedule(schedule, res)) return;
 
     const createdBy = req.user?.id;
+
     if (!createdBy) {
       return res.status(401).json({
         success: false,
@@ -89,20 +90,48 @@ const assignMedicineToPatient = async (req, res) => {
       endDate || null
     );
 
-    res.status(201).json({
+    // =====================================================
+    // SEND NOTIFICATION TO PATIENT
+    // =====================================================
+    try {
+      await sendNotification({
+        userId: patientId,
+        type: "medicine_assigned",
+        subject: "New Medicine Assigned",
+        message: `${medicineName} (${dosage}) has been assigned to you.`,
+        referenceType: "medicine",
+        referenceId: result.assignmentId,
+        metadata: {
+          assignmentId: result.assignmentId,
+        },
+        templateData: {
+          medicineName,
+          dosage,
+          startDate,
+        },
+      });
+    } catch (notificationError) {
+      console.error(
+        "Medicine assignment notification failed:",
+        notificationError
+      );
+      // Do not fail medicine assignment if notification fails
+    }
+
+    return res.status(201).json({
       success: true,
       message: "Medicine assigned successfully",
       assignmentId: result.assignmentId,
     });
   } catch (err) {
     console.error("Assign medicine error:", err);
-    res.status(500).json({
+
+    return res.status(500).json({
       success: false,
       message: err.message || "Server error",
     });
   }
 };
-
 
 // ✅ GET ALL
 const getPatientAssignedMedicines = async (req, res) => {
@@ -118,19 +147,19 @@ const getPatientAssignedMedicines = async (req, res) => {
 
     const medicines = await medicineAssignmentModel.getByPatientId(patientId);
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       data: medicines,
     });
   } catch (err) {
     console.error("Get medicines error:", err);
-    res.status(500).json({
+
+    return res.status(500).json({
       success: false,
       message: "Server error",
     });
   }
 };
-
 
 // ✅ GET TODAY
 const getTodaysMedicines = async (req, res) => {
@@ -147,19 +176,19 @@ const getTodaysMedicines = async (req, res) => {
     const medicines =
       await medicineAssignmentModel.getTodaysMedicines(patientId);
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       data: medicines,
     });
   } catch (err) {
     console.error("Get today's medicines error:", err);
-    res.status(500).json({
+
+    return res.status(500).json({
       success: false,
       message: "Server error",
     });
   }
 };
-
 
 // ✅ UPDATE
 const updatePatientAssignedMedicine = async (req, res) => {
@@ -198,6 +227,7 @@ const updatePatientAssignedMedicine = async (req, res) => {
     if (!validateSchedule(schedule, res)) return;
 
     const updatedBy = req.user?.id;
+
     if (!updatedBy) {
       return res.status(401).json({
         success: false,
@@ -224,19 +254,19 @@ const updatePatientAssignedMedicine = async (req, res) => {
       });
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: "Medicine updated successfully",
     });
   } catch (err) {
     console.error("Update medicine error:", err);
-    res.status(500).json({
+
+    return res.status(500).json({
       success: false,
       message: err.message || "Server error",
     });
   }
 };
-
 
 // ✅ DELETE
 const deletePatientAssignedMedicine = async (req, res) => {
@@ -259,19 +289,19 @@ const deletePatientAssignedMedicine = async (req, res) => {
       });
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: "Medicine deleted successfully",
     });
   } catch (err) {
     console.error("Delete medicine error:", err);
-    res.status(500).json({
+
+    return res.status(500).json({
       success: false,
       message: "Server error",
     });
   }
 };
-
 
 module.exports = {
   assignMedicineToPatient,
