@@ -1,13 +1,6 @@
 const pool = require("../config/db");
 const bcrypt = require("bcrypt");
 
-// ----------------------------------------------------------------------
-// --- HELPER FUNCTION: Expiration Notification Logic ---
-// ----------------------------------------------------------------------
-
-/** * 🔹 Logic to generate the expiration notification message based on days remaining.
- * This is used for both the paginated list and the single patient view.
- */
 const generateNotification = (days, status) => {
   // Only show notifications for Active packages and where days remaining is 0 or more
   if (status !== "Active" || days < 0) {

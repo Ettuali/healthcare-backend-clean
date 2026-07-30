@@ -6,6 +6,7 @@ const WebSocket = require("ws");
 const cryptoService = require("./services/crypto.service");
 const cron = require("node-cron");
 const deactivateExpiredPatients = require("./middleware/cron");
+const medicationReminderService = require("./services/medicineReminder.service");
 
 dotenv.config();
 
@@ -205,11 +206,20 @@ app.get("/", (req, res) => {
 });
 
 // =======================
-// 🔹 CRON
+// 🔹 CRON JOBS
 // =======================
+// Check expired packages
 cron.schedule("* * * * *", async () => {
   console.log("⏰ Checking expired packages...");
   await deactivateExpiredPatients();
+}, {
+  scheduled: true,
+  timezone: "Asia/Kolkata",
+});
+
+// Check medication reminders
+cron.schedule("* * * * *", async () => {
+  await medicationReminderService.run();
 }, {
   scheduled: true,
   timezone: "Asia/Kolkata",

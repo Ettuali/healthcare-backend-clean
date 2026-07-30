@@ -2,7 +2,7 @@ const patientModel = require("../models/adminpatient.model");
 const cryptoService = require("../services/crypto.service");
 const nurseModel = require("../models/adminnurse.model");
 const patientAssignmentModel = require("../models/patientAssign.model");
-
+const { sendNotification } = require("../services/notification.service");
 
 const getDuplicateMessage = (err) => {
   if (err.code !== "ER_DUP_ENTRY") return null;
@@ -57,7 +57,6 @@ const getAllPatients = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to retrieve patients",
-      
     });
   }
 };
@@ -66,9 +65,7 @@ const getAllPatients = async (req, res) => {
 const addPatient = async (req, res) => {
   try {
     const {
-      // =====================================================
       // BASIC INFO
-      // =====================================================
       name,
       phone,
       email,
@@ -77,18 +74,14 @@ const addPatient = async (req, res) => {
       gender,
       dob,
 
-      // =====================================================
       // LOCATION
-      // =====================================================
       state,
       city,
       area,
       zipcode,
       language,
 
-      // =====================================================
       // VITALS
-      // =====================================================
       severityLevel,
       bloodGroup,
       diagnosisType,
@@ -98,18 +91,13 @@ const addPatient = async (req, res) => {
       heartRate,
       oxygenSaturation,
 
-      // =====================================================
       // PACKAGE / PAYMENT
-      // =====================================================
       packageId,
       paymentMethod,
 
-      // =====================================================
       // ASSIGNMENTS
-      // =====================================================
       hospitalId,
       doctorId,
-
     } = req.body;
 
     // =====================================================
@@ -169,9 +157,7 @@ const addPatient = async (req, res) => {
     }
 
     if (!assignedNurse) {
-      console.warn(
-        `No caretaker available for patient ${name}`
-      );
+      console.warn(`No caretaker available for patient ${name}`);
     }
 
     // =====================================================
@@ -228,6 +214,55 @@ const addPatient = async (req, res) => {
     );
 
     // =====================================================
+    // NOTIFICATIONS DISPATCH
+    // =====================================================
+
+    // 1. Notify Doctor
+    if (doctorId) {
+      await sendNotification({
+        userId: doctorId,
+        subject: "New Patient Assigned",
+        message: `${name} has been assigned to you.`,
+        type: "patient_assignment",
+        referenceType: "patient",
+        referenceId: newPatientId,
+        channels: ["inapp"],
+      }).catch((err) =>
+        console.error("[addPatient] Doctor Notification Error:", err.message)
+      );
+    }
+
+    // 2. Notify Nurse / Caretaker
+    if (assignedNurse?.id) {
+      await sendNotification({
+        userId: assignedNurse.id,
+        subject: "New Patient Assigned",
+        message: `${name} has been assigned to your care team.`,
+        type: "care_team_assignment",
+        referenceType: "patient",
+        referenceId: newPatientId,
+        channels: ["inapp"],
+      }).catch((err) =>
+        console.error("[addPatient] Nurse Notification Error:", err.message)
+      );
+    }
+
+    // 3. Notify Patient
+    await sendNotification({
+      userId: newPatientId,
+      email,
+      phone,
+      subject: "Welcome to Our Healthcare Network",
+      message: `Hello ${name}, your account has been successfully created.`,
+      type: "patient_assignment",
+      referenceType: "patient",
+      referenceId: newPatientId,
+      channels: ["inapp"],
+    }).catch((err) =>
+      console.error("[addPatient] Patient Notification Error:", err.message)
+    );
+
+    // =====================================================
     // RESPONSE
     // =====================================================
 
@@ -256,25 +291,24 @@ const addPatient = async (req, res) => {
     });
 
   } catch (error) {
-
     console.error("[addPatient]", {
-  code: error.code,
-  message: error.message,
-});
+      code: error.code,
+      message: error.message,
+    });
 
     const duplicateMessage = getDuplicateMessage(error);
 
-if (duplicateMessage) {
-  return res.status(409).json({
-    success: false,
-    message: duplicateMessage,
-  });
-}
+    if (duplicateMessage) {
+      return res.status(409).json({
+        success: false,
+        message: duplicateMessage,
+      });
+    }
 
-return res.status(500).json({
-  success: false,
-  message: "Failed to create patient.",
-});
+    return res.status(500).json({
+      success: false,
+      message: "Failed to create patient.",
+    });
   }
 };
 
@@ -308,19 +342,14 @@ const handleGetPatient = async (patientId, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to retrieve patient",
-      
     });
   }
 };
-
-
 
 // ================= GET BY ID =================
 const getPatientById = async (req, res) => {
   return handleGetPatient(req.params.id, res);
 };
-
-
 
 // ================= GET BY ENCRYPTED ID =================
 const getPatientByEncryptedId = async (req, res) => {
@@ -367,7 +396,6 @@ const updatePatient = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to update patient",
-      
     });
   }
 };
@@ -393,7 +421,6 @@ const deletePatient = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to delete patient",
-      
     });
   }
 };

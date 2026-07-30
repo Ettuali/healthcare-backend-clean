@@ -21,6 +21,42 @@ const { sendPushNotification } = require("./firebase.service");
 const DeviceToken = require("../models/deviceToken.model");
 
 // =====================================================
+// HELPER FUNCTIONS
+// =====================================================
+
+const sendFcmToUser = async ({
+  userId,
+  title,
+  body,
+  type,
+  referenceId,
+  referenceType,
+}) => {
+  try {
+    const devices = await DeviceToken.getTokens(userId);
+
+    if (!devices || devices.length === 0) return;
+
+    for (const device of devices) {
+      if (!device.fcm_token) continue;
+
+      await sendPushNotification({
+        token: device.fcm_token,
+        title,
+        body,
+        data: {
+          type,
+          referenceId: referenceId ? String(referenceId) : "",
+          referenceType: referenceType ? String(referenceType) : "",
+        },
+      });
+    }
+  } catch (err) {
+    console.error("[FCM]", err.message);
+  }
+};
+
+// =====================================================
 // CHANNEL DISPATCHERS
 // =====================================================
 
@@ -34,14 +70,14 @@ const dispatchers = {
     secrets,
   }) => {
     return sendEmail({
-        providerKey,
-        to,
-        subject,
-        message,
-        config,
-        secrets,
+      providerKey,
+      to,
+      subject,
+      message,
+      config,
+      secrets,
     });
-},
+  },
 
   sms: async ({
     providerKey,
@@ -51,13 +87,13 @@ const dispatchers = {
     secrets,
   }) => {
     return sendSMS({
-        providerKey,
-        to,
-        message,
-        config,
-        secrets,
+      providerKey,
+      to,
+      message,
+      config,
+      secrets,
     });
-},
+  },
 
   whatsapp: async ({
     providerKey,
@@ -67,13 +103,13 @@ const dispatchers = {
     secrets,
   }) => {
     return sendWhatsapp({
-        providerKey,
-        to,
-        message,
-        config,
-        secrets,
+      providerKey,
+      to,
+      message,
+      config,
+      secrets,
     });
-},
+  },
 };
 
 // =====================================================
@@ -270,37 +306,29 @@ const sendNotification = async ({
       results.inappId = row.id;
 
       // =====================================================
-      // MEDICAL ALERT FCM PUSH INTEGRATION
+      // GENERALIZED FCM PUSH INTEGRATION
       // =====================================================
-      if (type === "medical_alert") {
-        try {
-          const devices = await DeviceToken.getTokens(userId);
-          if (devices && devices.length > 0) {
-            for (const device of devices) {
-              const token = device.fcm_token;
-              
-              if (!token) continue;
+    const pushEnabledTypes = [
+  "medical_alert",
+  "patient_assignment",
+  "care_team_assignment",
 
-              try {
-                await sendPushNotification({
-                  token,
-                  title: content.subject || subject,
-                  body: content.body,
-                  data: {
-                    type: "medical_alert",
-                    notificationId: String(row.id),
-                    referenceId: referenceId ? String(referenceId) : "",
-                    referenceType: referenceType ? String(referenceType) : "",
-                  }
-                });
-              } catch (err) {
-                console.error("FCM Error:", err.message);
-              }
-            }
-          }
-        } catch (tokenErr) {
-          console.error(`[FCM Device Lookup Error]:`, tokenErr.message);
-        }
+  "medicine_due_soon",
+  "medicine_time",
+  "medicine_pending",
+  "medicine_missed",
+];
+
+      if (pushEnabledTypes.includes(type)) {
+        await sendFcmToUser({
+          userId,
+          title: content.subject || subject,
+          body: content.body,
+          type,
+          notificationId: row.id,
+          referenceId,
+          referenceType,
+        });
       }
 
       emitter.toUser(userId, "notification:new", {
@@ -325,4 +353,5 @@ const sendNotification = async ({
 
 module.exports = {
   sendNotification,
+  sendFcmToUser,
 };

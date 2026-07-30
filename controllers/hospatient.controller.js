@@ -1,5 +1,6 @@
 const hospatientModel = require("../models/hospatient.model");
 const pool = require("../config/db");
+const { sendNotification } = require("../services/notification.service");
 
 // ─── Controller Actions ──────────────────────────────────────────────────────
 const getDuplicateMessage = (err) => {
@@ -17,8 +18,6 @@ const getDuplicateMessage = (err) => {
 
   return "A record with these details already exists.";
 };
-
-
 
 const addPatient = async (req, res) => {
   try {
@@ -45,29 +44,79 @@ const addPatient = async (req, res) => {
       }
     );
 
-    // 3. Return the result including the auto-assigned nurse
+    const newPatientId = result.patientId;
+    const assignedCaretakerId = result.caretakerId;
+
+    // 3. Notifications Dispatch
+    
+    // Notify Assigned Doctor
+    if (data.doctorId) {
+      await sendNotification({
+        userId: data.doctorId,
+        subject: "New Patient Assigned",
+        message: `${data.name} has been assigned to you.`,
+        type: "patient_assignment",
+        channels: ["inapp"],
+        referenceType: "patient",
+        referenceId: newPatientId,
+      }).catch((err) =>
+        console.error("[addPatient] Doctor Notification Error:", err.message)
+      );
+    }
+
+    // Notify Assigned Nurse / Caretaker
+    if (assignedCaretakerId) {
+      await sendNotification({
+        userId: assignedCaretakerId,
+        subject: "New Patient Assigned",
+        message: `${data.name} has been assigned to your care.`,
+        type: "patient_assignment",
+        channels: ["inapp"],
+        referenceType: "patient",
+        referenceId: newPatientId,
+      }).catch((err) =>
+        console.error("[addPatient] Nurse Notification Error:", err.message)
+      );
+    }
+
+    // Notify Created Patient
+    await sendNotification({
+      userId: newPatientId,
+      email: data.email,
+      phone: data.phone,
+      subject: "Care Team Assigned",
+      message: "Your doctor and caretaker have been assigned to your care.",
+      type: "care_team_assignment",
+      channels: ["inapp"],
+      referenceType: "patient",
+      referenceId: newPatientId,
+    }).catch((err) =>
+      console.error("[addPatient] Patient Notification Error:", err.message)
+    );
+
+    // 4. Return the result including the auto-assigned nurse
     res.status(201).json({
       success: true,
       message: "Patient created and assigned successfully",
-      patientId: result.patientId,
-      assignedCaretaker: result.caretakerId
+      patientId: newPatientId,
+      assignedCaretaker: assignedCaretakerId
     });
 
   } catch (err) {
     console.error("Error in addPatient controller:", err);
     const duplicateMessage = getDuplicateMessage(err);
 
-if (duplicateMessage) {
-  return res.status(409).json({
-    success: false,
-    message: duplicateMessage,
-  });
-}
+    if (duplicateMessage) {
+      return res.status(409).json({
+        success: false,
+        message: duplicateMessage,
+      });
+    }
 
-return res.status(500).json({
-  success: false,
-  message: "An error occurred while creating the patient.",
-});
+    return res.status(500).json({
+      success: false,
+      message: "An error occurred while creating the patient.",
+    });
   }
 };
 
@@ -91,7 +140,6 @@ const getPatients = async (req, res) => {
 
 const getDoctors = async (req, res) => {
   try {
-    // Note: Ensure getDoctorLoad or getDoctorsByHospitalId exists in your model
     const hospitalId = await hospatientModel.getHospitalIdByUserId(req.user.id);
     const data = await hospatientModel.getDoctorLoad(hospitalId);
     res.json(data);
@@ -102,7 +150,6 @@ const getDoctors = async (req, res) => {
 
 const getPatientById = async (req, res) => {
   try {
-    // This assumes you have a detailed fetch method in your model
     const data = await hospatientModel.getPatientDetailsById(req.params.id);
     if (!data) return res.status(404).json({ message: "Patient not found" });
     res.json(data);
@@ -113,10 +160,10 @@ const getPatientById = async (req, res) => {
 
 const updatePatient = async (req, res) => {
   try {
-   const { 
-  name, email, phone, age, gender, preferredLanguage, doctorId,
-  city, state, area, zipcode, diagnosisType, bloodGroup
-} = req.body;
+    const { 
+      name, email, phone, age, gender, preferredLanguage, doctorId,
+      city, state, area, zipcode, diagnosisType, bloodGroup
+    } = req.body;
 
     if (!name || !email) {
       return res.status(400).json({
@@ -129,20 +176,20 @@ const updatePatient = async (req, res) => {
       req.params.id,
       req.user.id,
       {
-  name,
-  email,
-  phone,
-  age,
-  gender,
-  preferredLanguage,
-  doctorId,
-  city,
-  state,
-  area,
-  zipcode,
-  diagnosisType,
-  bloodGroup
-}
+        name,
+        email,
+        phone,
+        age,
+        gender,
+        preferredLanguage,
+        doctorId,
+        city,
+        state,
+        area,
+        zipcode,
+        diagnosisType,
+        bloodGroup
+      }
     );
 
     const updated = await hospatientModel.getPatientDetailsById(req.params.id);
@@ -154,7 +201,7 @@ const updatePatient = async (req, res) => {
 
   } catch (err) {
     console.error("Update Patient Error:", err);
-    res.status(500).json({ message: err.message });
+    res.json(500).json({ message: err.message });
   }
 };
 
@@ -199,6 +246,7 @@ const renewPatientPackage = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+
 const getVitalsPatients = async (req, res) => {
   try {
     const result = await hospatientModel.getVitalsPatients(
@@ -222,7 +270,6 @@ const getVitalsPatients = async (req, res) => {
     });
   }
 };
-
 
 module.exports = {
   addPatient,
